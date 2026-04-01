@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import NextImage from "next/image";
 import { useFiles } from "@/hooks/useFiles";
 import { useDrive } from "@/hooks/useDrive";
 import { formatBytes, formatDate } from "@/lib/format";
@@ -99,8 +100,6 @@ export default function FilesPage() {
     getPreviewBlobUrl,
     createFolder,
     uploadFile,
-    getToken,
-    accounts,
   } = useDrive();
 
   const [search, setSearch] = useState("");
@@ -466,7 +465,7 @@ export default function FilesPage() {
       <Card
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        className="min-h-[400px]"
+        className="min-h-100"
       >
         <CardContent className="p-0">
           {isLoading ? (
@@ -598,10 +597,13 @@ export default function FilesPage() {
                 >
                   {file.thumbnailLink &&
                   file.mimeType?.startsWith("image/") ? (
-                    <img
+                    <NextImage
                       src={file.thumbnailLink}
                       alt={file.fileName}
+                      width={48}
+                      height={48}
                       className="h-12 w-12 rounded object-cover"
+                      unoptimized
                     />
                   ) : (
                     <FileIcon mimeType={file.mimeType} />
@@ -649,7 +651,7 @@ export default function FilesPage() {
         onOpenChange={(open) => !open && setNewFolderDialog(false)}
       >
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader className="pb-2">
             <DialogTitle>Create New Folder</DialogTitle>
           </DialogHeader>
           <Input
@@ -659,7 +661,7 @@ export default function FilesPage() {
             onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
             autoFocus
           />
-          <DialogFooter>
+          <DialogFooter className="mt-2">
             <Button
               variant="outline"
               onClick={() => setNewFolderDialog(false)}
@@ -678,8 +680,8 @@ export default function FilesPage() {
           if (!open) closePreview();
         }}
       >
-        <DialogContent className="max-w-[90vw] w-full max-h-[92vh] h-[92vh] flex flex-col p-0">
-          <DialogHeader className="px-6 pt-5 pb-3 border-b">
+        <DialogContent className="max-w-[90vw]! w-full max-h-[92vh] h-[92vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-2 border-b">
             <div className="flex items-center justify-between">
               <DialogTitle className="truncate pr-8 text-lg">
                 {previewFile?.fileName}
@@ -687,7 +689,7 @@ export default function FilesPage() {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-auto flex items-center justify-center bg-muted/30 relative">
+          <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center bg-muted/30 relative">
             {/* Loading spinner */}
             {previewLoading && (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -722,10 +724,13 @@ export default function FilesPage() {
               !previewError &&
               previewBlobUrl &&
               previewFile?.mimeType?.startsWith("image/") && (
-                <img
+                <NextImage
                   src={previewBlobUrl}
                   alt={previewFile.fileName}
-                  className="max-w-full max-h-full object-contain p-4"
+                  width={1200}
+                  height={800}
+                  className="max-w-full max-h-[80vh] w-auto h-auto object-contain p-4"
+                  unoptimized
                 />
               )}
 
@@ -742,8 +747,8 @@ export default function FilesPage() {
               )}
           </div>
 
-          <DialogFooter className="px-6 py-3 border-t gap-2">
-            <Button
+          <DialogFooter className="px-6 py-2 border-t gap-2">
+            {/* <Button
               variant="outline"
               onClick={() => {
                 if (previewFile) handleDownload(previewFile);
@@ -755,7 +760,7 @@ export default function FilesPage() {
             <Button variant="outline" onClick={closePreview}>
               <X className="mr-2 h-4 w-4" />
               Close
-            </Button>
+            </Button> */}
           </DialogFooter>
         </DialogContent>
       </Dialog>

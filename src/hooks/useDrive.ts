@@ -5,6 +5,9 @@ import { useAccounts } from "@/hooks/useAccounts";
 import * as drive from "@/services/drive";
 import type { FileMetadata, ConnectedAccount } from "@/types";
 
+/** Module-level blob URL cache — survives re-renders and route changes */
+const blobCache = new Map<string, string>();
+
 export function useDrive() {
   const { accounts, getToken } = useAccounts();
 
@@ -86,8 +89,12 @@ export function useDrive() {
 
   const getPreviewBlobUrl = useCallback(
     async (file: FileMetadata): Promise<string> => {
+      const cached = blobCache.get(file.driveFileId);
+      if (cached) return cached;
       const token = await getToken(file.accountEmail);
-      return drive.fetchFileBlob(token, file.driveFileId);
+      const url = await drive.fetchFileBlob(token, file.driveFileId);
+      blobCache.set(file.driveFileId, url);
+      return url;
     },
     [getToken],
   );

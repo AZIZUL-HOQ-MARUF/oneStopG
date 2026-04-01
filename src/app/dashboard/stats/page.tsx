@@ -92,14 +92,6 @@ export default function StatsPage() {
     .filter(([, size]) => size > 0)
     .map(([type, size]) => ({ name: type, size }));
 
-  const storageAccountData = quotas.map((q, i) => ({
-    name: q.email.split("@")[0],
-    email: q.email,
-    used: q.used,
-    free: q.free,
-    fill: ACCOUNT_COLORS[i % ACCOUNT_COLORS.length],
-  }));
-
   return (
     <div className="space-y-6">
       <div>
@@ -168,7 +160,7 @@ export default function StatsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Skeleton className="h-[300px] w-full" />
+            <Skeleton className="h-75 w-full" />
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={weeklyData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
@@ -204,7 +196,7 @@ export default function StatsPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-75 w-full" />
             ) : fileTypeData.length === 0 ? (
               <p className="text-center text-muted-foreground py-12">No files yet</p>
             ) : (
@@ -256,7 +248,7 @@ export default function StatsPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-75 w-full" />
             ) : (
               <div className="space-y-6">
                 {quotas.map((q, i) => {
@@ -271,7 +263,7 @@ export default function StatsPage() {
                             className="h-3 w-3 rounded-full"
                             style={{ backgroundColor: color }}
                           />
-                          <span className="font-medium truncate max-w-[200px]">
+                          <span className="font-medium truncate max-w-50">
                             {q.email}
                           </span>
                         </div>
@@ -306,7 +298,7 @@ export default function StatsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Skeleton className="h-[300px] w-full" />
+            <Skeleton className="h-75 w-full" />
           ) : storageSizeData.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No data</p>
           ) : (

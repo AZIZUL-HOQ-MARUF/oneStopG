@@ -19,7 +19,7 @@ export default function Navbar({
 }: {
   onMenuOpen?: () => void;
 }) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, mounted } = useTheme();
   const { primaryEmail } = useAccounts();
 
   const initials = primaryEmail
@@ -45,7 +45,9 @@ export default function Navbar({
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="h-8 w-8"
         >
-          {theme === "dark" ? (
+          {!mounted ? (
+            <span className="h-4 w-4" />
+          ) : theme === "dark" ? (
             <Sun className="h-4 w-4" />
           ) : (
             <Moon className="h-4 w-4" />

@@ -15,11 +15,13 @@ interface StorageState {
   totalFree: number;
   isLoading: boolean;
   error: string | null;
+  lastFetchedAt: number;
   refreshStorage: (accounts: AccountToken[]) => Promise<void>;
   clearStorage: () => void;
 }
 
 let refreshPromise: Promise<void> | null = null;
+const STORAGE_MEMORY_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function computeTotals(
   accounts: AccountToken[],
@@ -55,13 +57,14 @@ function buildFallbackQuotas(accounts: AccountToken[]): AccountQuota[] {
   }));
 }
 
-export const useStorageStore = create<StorageState>((set) => ({
+export const useStorageStore = create<StorageState>((set, get) => ({
   quotas: [],
   totalUsed: 0,
   totalLimit: 0,
   totalFree: 0,
   isLoading: true,
   error: null,
+  lastFetchedAt: 0,
 
   refreshStorage: async (accounts: AccountToken[]) => {
     if (accounts.length === 0) {
@@ -73,6 +76,13 @@ export const useStorageStore = create<StorageState>((set) => ({
         isLoading: false,
         error: null,
       });
+      return;
+    }
+
+    // If data is fresh in memory, skip the API call
+    const state = get();
+    if (state.quotas.length > 0 && Date.now() - state.lastFetchedAt < STORAGE_MEMORY_TTL_MS) {
+      set({ isLoading: false });
       return;
     }
 
@@ -89,7 +99,7 @@ export const useStorageStore = create<StorageState>((set) => ({
       try {
         const results = await drive.getAllQuotas(accounts);
         const totals = computeTotals(accounts, results);
-        set({ quotas: results, ...totals, isLoading: false, error: null });
+        set({ quotas: results, ...totals, isLoading: false, error: null, lastFetchedAt: Date.now() });
       } catch (err) {
         set({
           isLoading: false,

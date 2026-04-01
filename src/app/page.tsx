@@ -113,7 +113,7 @@ const pages = [
 
 export default function LandingPage() {
   const { data: session } = useSession();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, mounted } = useTheme();
 
   const ctaHref = session ? "/dashboard" : "/setup";
   const ctaLabel = session ? "Go to Dashboard" : "Get Started";
@@ -124,7 +124,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-blue-500 to-violet-600">
               <Cloud className="h-4 w-4 text-white" />
             </div>
             <span className="text-sm font-bold tracking-tight">OneStopG</span>
@@ -136,7 +136,9 @@ export default function LandingPage() {
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className="h-8 w-8"
             >
-              {theme === "dark" ? (
+              {!mounted ? (
+                <span className="h-4 w-4" />
+              ) : theme === "dark" ? (
                 <Sun className="h-4 w-4" />
               ) : (
                 <Moon className="h-4 w-4" />
@@ -152,7 +154,7 @@ export default function LandingPage() {
 
       {/* Welcome back banner */}
       {session && (
-        <section className="border-b border-border/50 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30">
+        <section className="border-b border-border/50 bg-linear-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30">
           <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-6 text-center sm:flex-row sm:justify-between sm:text-left sm:px-6">
             <div>
               <h2 className="text-lg font-semibold">Welcome back</h2>
@@ -172,9 +174,9 @@ export default function LandingPage() {
       <section className="relative overflow-hidden">
         {/* Background gradient blobs */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 left-1/4 h-[500px] w-[500px] rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
-          <div className="absolute -top-20 right-1/4 h-[400px] w-[400px] rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-500/10" />
-          <div className="absolute top-40 left-1/2 h-[300px] w-[300px] -translate-x-1/2 rounded-full bg-indigo-400/8 blur-3xl dark:bg-indigo-500/8" />
+          <div className="absolute -top-40 left-1/4 h-125 w-125 rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
+          <div className="absolute -top-20 right-1/4 h-100 w-100 rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-500/10" />
+          <div className="absolute top-40 left-1/2 h-75 w-75 -translate-x-1/2 rounded-full bg-indigo-400/8 blur-3xl dark:bg-indigo-500/8" />
         </div>
 
         <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-24 text-center md:py-36">
@@ -187,7 +189,7 @@ export default function LandingPage() {
 
           <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight md:text-7xl">
             Your Storage,{" "}
-            <span className="bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent dark:from-blue-400 dark:via-violet-400 dark:to-purple-400">
+            <span className="bg-linear-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent dark:from-blue-400 dark:via-violet-400 dark:to-purple-400">
               Multiplied
             </span>
           </h1>
@@ -204,7 +206,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Button
               size="lg"
-              className="bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 dark:shadow-blue-500/15 dark:hover:shadow-blue-500/30"
+              className="bg-linear-to-r from-blue-600 to-violet-600 px-6 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 dark:shadow-blue-500/15 dark:hover:shadow-blue-500/30"
               render={<Link href={ctaHref} />}
             >
               {ctaLabel}
@@ -240,7 +242,7 @@ export default function LandingPage() {
           <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
               Everything you need,{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-violet-400">
+              <span className="bg-linear-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-violet-400">
                 nothing you don&apos;t
               </span>
             </h2>
@@ -275,7 +277,7 @@ export default function LandingPage() {
           <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
               Six dedicated views,{" "}
-              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent dark:from-emerald-400 dark:to-teal-400">
+              <span className="bg-linear-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent dark:from-emerald-400 dark:to-teal-400">
                 one coherent app
               </span>
             </h2>
@@ -286,7 +288,7 @@ export default function LandingPage() {
                 key={page.label}
                 className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:shadow-lg hover:shadow-primary/5"
               >
-                <div className={`mb-3 inline-flex rounded-lg bg-gradient-to-r ${page.accent} px-3 py-1 text-xs font-semibold text-white`}>
+                <div className={`mb-3 inline-flex rounded-lg bg-linear-to-r ${page.accent} px-3 py-1 text-xs font-semibold text-white`}>
                   {page.label}
                 </div>
                 <p className="text-sm leading-relaxed text-muted-foreground">
@@ -302,13 +304,13 @@ export default function LandingPage() {
       <section className="border-t border-border/50">
         <div className="relative overflow-hidden py-20">
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute bottom-0 left-1/3 h-[300px] w-[300px] rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
-            <div className="absolute bottom-0 right-1/3 h-[250px] w-[250px] rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-500/10" />
+            <div className="absolute bottom-0 left-1/3 h-75 w-75 rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
+            <div className="absolute bottom-0 right-1/3 h-62.5 w-62.5 rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-500/10" />
           </div>
           <div className="relative mx-auto max-w-4xl px-6 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
               Get started in{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-violet-400">
+              <span className="bg-linear-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-violet-400">
                 minutes
               </span>
             </h2>
@@ -319,7 +321,7 @@ export default function LandingPage() {
             <div className="mt-8">
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 dark:shadow-blue-500/15 dark:hover:shadow-blue-500/30"
+                className="bg-linear-to-r from-blue-600 to-violet-600 px-6 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 dark:shadow-blue-500/15 dark:hover:shadow-blue-500/30"
                 render={<Link href={ctaHref} />}
               >
                 {ctaLabel}
@@ -334,7 +336,7 @@ export default function LandingPage() {
       <footer className="border-t border-border/50 bg-card py-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-violet-600">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-linear-to-br from-blue-500 to-violet-600">
               <Cloud className="h-3 w-3 text-white" />
             </div>
             <span className="text-sm font-medium text-muted-foreground">

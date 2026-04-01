@@ -15,7 +15,7 @@ interface OneStopGDB extends DBSchema {
 
 const DB_NAME = "onestopg";
 const DB_VERSION = 1;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 let dbPromise: Promise<IDBPDatabase<OneStopGDB>> | null = null;
 
