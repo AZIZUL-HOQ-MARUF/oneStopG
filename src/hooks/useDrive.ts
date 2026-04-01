@@ -56,9 +56,9 @@ export function useDrive() {
   );
 
   const shareFile = useCallback(
-    async (file: FileMetadata): Promise<string> => {
+    async (file: FileMetadata, email?: string): Promise<string> => {
       const token = await getToken(file.accountEmail);
-      return drive.shareFile(token, file.driveFileId);
+      return drive.shareFile(token, file.driveFileId, email);
     },
     [getToken],
   );

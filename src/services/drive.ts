@@ -202,14 +202,19 @@ export async function deleteFile(
 export async function shareFile(
   token: string,
   fileId: string,
+  email?: string,
 ): Promise<string> {
+  const permission: Record<string, string> = email
+    ? { type: "user", role: "reader", emailAddress: email }
+    : { type: "anyone", role: "reader" };
+
   await retryOnRateLimit(() =>
     driveRequest(
       token,
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions`,
       {
         method: "POST",
-        body: JSON.stringify({ type: "anyone", role: "reader" }),
+        body: JSON.stringify(permission),
         headers: { "Content-Type": "application/json" },
       },
     ),
