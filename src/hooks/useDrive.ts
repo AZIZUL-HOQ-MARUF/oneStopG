@@ -99,6 +99,19 @@ export function useDrive() {
     [getToken],
   );
 
+  const getExportBlobUrl = useCallback(
+    async (file: FileMetadata): Promise<string> => {
+      const key = `export-${file.driveFileId}`;
+      const cached = blobCache.get(key);
+      if (cached) return cached;
+      const token = await getToken(file.accountEmail);
+      const url = await drive.fetchExportBlob(token, file.driveFileId);
+      blobCache.set(key, url);
+      return url;
+    },
+    [getToken],
+  );
+
   const createFolder = useCallback(
     async (name: string, parentId?: string, accountEmail?: string) => {
       const email = accountEmail ?? accounts[0]?.email;
@@ -144,6 +157,7 @@ export function useDrive() {
     getDownloadUrl,
     openFile,
     getPreviewBlobUrl,
+    getExportBlobUrl,
     createFolder,
     uploadFile,
     getToken,

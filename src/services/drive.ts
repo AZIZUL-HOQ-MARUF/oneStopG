@@ -383,6 +383,13 @@ const EXPORT_MAP: Record<string, { mime: string; ext: string }> = {
   "application/vnd.google-apps.drawing": { mime: "application/pdf", ext: "pdf" },
 };
 
+/** Google Workspace types that can be exported as PDF for inline preview */
+export const PREVIEWABLE_WORKSPACE_TYPES = new Set([
+  "application/vnd.google-apps.document",
+  "application/vnd.google-apps.presentation",
+  "application/vnd.google-apps.drawing",
+]);
+
 export function isGoogleWorkspaceFile(mimeType: string | null): boolean {
   return !!mimeType && mimeType.startsWith("application/vnd.google-apps.");
 }
@@ -428,6 +435,22 @@ export async function fetchFileBlob(
     driveRequest(
       token,
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+    ),
+  );
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+/** Export a Google Workspace file (Docs, Slides, Drawings) as PDF blob for inline preview */
+export async function fetchExportBlob(
+  token: string,
+  fileId: string,
+  exportMimeType: string = "application/pdf",
+): Promise<string> {
+  const response = await retryOnRateLimit(() =>
+    driveRequest(
+      token,
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMimeType)}`,
     ),
   );
   const blob = await response.blob();

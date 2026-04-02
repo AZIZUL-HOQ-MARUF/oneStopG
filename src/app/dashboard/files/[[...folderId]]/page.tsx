@@ -96,7 +96,13 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
 
 function canPreviewInline(mimeType: string | null): boolean {
   const t = mimeType ?? "";
-  return t.startsWith("image/") || t === "application/pdf";
+  if (t.startsWith("image/") || t === "application/pdf") return true;
+  if (driveService.PREVIEWABLE_WORKSPACE_TYPES.has(t)) return true;
+  return false;
+}
+
+function isSpreadsheet(mimeType: string | null): boolean {
+  return mimeType === "application/vnd.google-apps.spreadsheet";
 }
 
 const SORT_LABELS: Record<SortField, string> = {
@@ -121,6 +127,7 @@ export default function FilesPage() {
     getDownloadUrl,
     openFile,
     getPreviewBlobUrl,
+    getExportBlobUrl,
     createFolder,
     uploadFile,
   } = useDrive();
@@ -312,6 +319,37 @@ export default function FilesPage() {
       navigateToFolder(file);
       return;
     }
+    // Spreadsheets → open directly in Google Sheets
+    if (isSpreadsheet(file.mimeType)) {
+      try {
+        const url = await openFile(file);
+        window.open(url, "_blank", "noopener");
+      } catch (err) {
+        toast.error("Failed to open spreadsheet", {
+          description: err instanceof Error ? err.message : undefined,
+        });
+      }
+      return;
+    }
+    // Docs/Presentations/Drawings → export as PDF for inline preview
+    if (driveService.PREVIEWABLE_WORKSPACE_TYPES.has(file.mimeType ?? "")) {
+      setPreviewFile(file);
+      setPreviewBlobUrl(null);
+      setPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const blobUrl = await getExportBlobUrl(file);
+        setPreviewBlobUrl(blobUrl);
+      } catch (err) {
+        setPreviewError(
+          err instanceof Error ? err.message : "Failed to load preview",
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
+      return;
+    }
+    // Other Google Workspace files → open in Google
     if (driveService.isGoogleWorkspaceFile(file.mimeType)) {
       try {
         const url = await openFile(file);
@@ -323,6 +361,7 @@ export default function FilesPage() {
       }
       return;
     }
+    // Images and PDFs → blob preview
     if (canPreviewInline(file.mimeType)) {
       setPreviewFile(file);
       setPreviewBlobUrl(null);
@@ -1397,6 +1436,40 @@ export default function FilesPage() {
                   className="w-full h-full border-0"
                   title={previewFile.fileName}
                 />
+              )}
+
+            {/* Exported Workspace file (Docs/Slides/Drawings) as PDF */}
+            {!previewLoading &&
+              !previewError &&
+              previewBlobUrl &&
+              previewFile?.mimeType &&
+              driveService.PREVIEWABLE_WORKSPACE_TYPES.has(previewFile.mimeType) && (
+                <iframe
+                  src={previewBlobUrl}
+                  className="w-full h-full border-0"
+                  title={previewFile.fileName}
+                />
+              )}
+
+            {/* Floating "Open in Google" button for workspace files */}
+            {!previewLoading &&
+              !previewError &&
+              previewFile?.mimeType &&
+              driveService.PREVIEWABLE_WORKSPACE_TYPES.has(previewFile.mimeType) && (
+                <Button
+                  className="absolute bottom-6 right-6 shadow-lg gap-2"
+                  onClick={async () => {
+                    try {
+                      const url = await openFile(previewFile);
+                      window.open(url, "_blank", "noopener");
+                    } catch {
+                      toast.error("Failed to open in Google");
+                    }
+                  }}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Google
+                </Button>
               )}
           </div>
 
