@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import NextImage from "next/image";
 import { useFiles } from "@/hooks/useFiles";
@@ -17,9 +17,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -37,11 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Upload,
   Search,
-  MoreVertical,
-  Pencil,
   Trash2,
-  Download,
-  Share2,
   FolderOpen,
   FolderPlus,
   FolderInput,
@@ -56,7 +50,6 @@ import {
   List,
   RefreshCw,
   ChevronRight,
-  Eye,
   ExternalLink,
   X,
   Loader2,
@@ -67,6 +60,7 @@ import {
   Mail,
   Check,
 } from "lucide-react";
+import { FileActionMenu } from "@/components/file-action-menu";
 import * as driveService from "@/services/drive";
 import type { FileMetadata } from "@/types";
 
@@ -176,6 +170,19 @@ export default function FilesPage() {
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
 
   // ── Derived data ──────────────────────────────────────────
+  // O(1) lookup map for files by driveFileId
+  const fileById = useMemo(() => {
+    const m = new Map<string, FileMetadata>();
+    for (const f of files) m.set(f.driveFileId, f);
+    return m;
+  }, [files]);
+
+  // Set of known parent IDs for O(1) root-folder check
+  const knownFileIds = useMemo(
+    () => new Set(files.map((f) => f.driveFileId)),
+    [files],
+  );
+
   const breadcrumbs = useMemo(() => {
     const crumbs: { id: string | null; name: string }[] = [
       { id: null, name: "My Drive" },
@@ -187,31 +194,31 @@ export default function FilesPage() {
     while (fId) {
       if (visited.has(fId)) break;
       visited.add(fId);
-      const folder = files.find((f) => f.driveFileId === fId);
+      const folder = fileById.get(fId);
       if (!folder) break;
       chain.unshift({ id: folder.driveFileId, name: folder.fileName });
       fId = folder.parentDriveFileId;
     }
     return [...crumbs, ...chain];
-  }, [currentFolder, files]);
+  }, [currentFolder, fileById]);
 
   const accountEmails = useMemo(
     () => [...new Set(files.map((f) => f.accountEmail))],
     [files],
   );
 
-  const filteredFiles = files.filter((f) => {
+  const filteredFiles = useMemo(() => files.filter((f) => {
     if (accountFilter !== "all" && f.accountEmail !== accountFilter)
       return false;
     const inFolder =
       currentFolder === null
         ? f.parentDriveFileId === null ||
-          !files.some((p) => p.driveFileId === f.parentDriveFileId)
+          !knownFileIds.has(f.parentDriveFileId!)
         : f.parentDriveFileId === currentFolder;
     const matchesSearch =
       !search || f.fileName.toLowerCase().includes(search.toLowerCase());
     return inFolder && matchesSearch;
-  });
+  }), [files, accountFilter, currentFolder, search, knownFileIds]);
 
   const sortedFiles = useMemo(() => {
     const arr = [...filteredFiles];
@@ -286,18 +293,74 @@ export default function FilesPage() {
   );
 
   // ── Navigation ────────────────────────────────────────────
-  const navigateToFolder = (file: FileMetadata) => {
-    router.push(`/dashboard/files/${file.driveFileId}`);
-  };
+  const [, startTransition] = useTransition();
 
-  const navigateToBreadcrumb = (index: number) => {
+  const navigateToFolder = useCallback((file: FileMetadata) => {
+    setSelectedIds(new Set());
+    startTransition(() => {
+      router.push(`/dashboard/files/${file.driveFileId}`);
+    });
+  }, [router]);
+
+  const navigateToBreadcrumb = useCallback((index: number) => {
     const crumb = breadcrumbs[index];
-    if (crumb.id === null) {
-      router.push("/dashboard/files");
-    } else {
-      router.push(`/dashboard/files/${crumb.id}`);
+    setSelectedIds(new Set());
+    startTransition(() => {
+      if (crumb.id === null) {
+        router.push("/dashboard/files");
+      } else {
+        router.push(`/dashboard/files/${crumb.id}`);
+      }
+    });
+  }, [breadcrumbs, router]);
+
+  // ── Stable callbacks for FileActionMenu ───────────────────
+  const onMenuRename = useCallback((file: FileMetadata) => {
+    setNewName(file.fileName);
+    setRenameDialog(file);
+  }, []);
+
+  const onMenuMove = useCallback((filesToMove: FileMetadata[]) => {
+    setMoveTargetId(null);
+    setMoveFolderSearch("");
+    setMoveDialog(filesToMove);
+  }, []);
+
+  const onMenuShare = useCallback((file: FileMetadata) => {
+    setShareEmail("");
+    setShareDialog(file);
+  }, []);
+
+  // ── CRUD handlers (order matters — handleDownload used by handleOpenFile) ──
+  const handleTrash = useCallback(async (file: FileMetadata) => {
+    try {
+      await trashFile(file);
+      toast.success("Moved to trash");
+      refreshFiles();
+    } catch (err) {
+      toast.error("Failed to trash file", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
-  };
+  }, [trashFile, refreshFiles]);
+
+  const handleDownload = useCallback(async (file: FileMetadata) => {
+    try {
+      const url = await getDownloadUrl(file);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.fileName;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      toast.error("Failed to download", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  }, [getDownloadUrl]);
 
   // ── Preview ───────────────────────────────────────────────
   useEffect(() => {
@@ -314,7 +377,7 @@ export default function FilesPage() {
     setPreviewError(null);
   }, [previewBlobUrl]);
 
-  const handleOpenFile = async (file: FileMetadata) => {
+  const handleOpenFile = useCallback(async (file: FileMetadata) => {
     if (file.mimeType === "application/vnd.google-apps.folder") {
       navigateToFolder(file);
       return;
@@ -380,7 +443,7 @@ export default function FilesPage() {
       return;
     }
     handleDownload(file);
-  };
+  }, [navigateToFolder, openFile, getExportBlobUrl, getPreviewBlobUrl, handleDownload]);
 
   // ── CRUD handlers ─────────────────────────────────────────
   const handleRename = async () => {
@@ -408,36 +471,6 @@ export default function FilesPage() {
       refreshFiles();
     } catch (err) {
       toast.error("Failed to create folder", {
-        description: err instanceof Error ? err.message : undefined,
-      });
-    }
-  };
-
-  const handleTrash = async (file: FileMetadata) => {
-    try {
-      await trashFile(file);
-      toast.success("Moved to trash");
-      refreshFiles();
-    } catch (err) {
-      toast.error("Failed to trash file", {
-        description: err instanceof Error ? err.message : undefined,
-      });
-    }
-  };
-
-  const handleDownload = async (file: FileMetadata) => {
-    try {
-      const url = await getDownloadUrl(file);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = file.fileName;
-      a.target = "_blank";
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (err) {
-      toast.error("Failed to download", {
         description: err instanceof Error ? err.message : undefined,
       });
     }
@@ -486,7 +519,7 @@ export default function FilesPage() {
       for (const file of moveDialog) {
         await moveFile(file, moveTargetId, file.parentDriveFileId ?? undefined);
       }
-      const targetFolder = files.find((f) => f.driveFileId === moveTargetId);
+      const targetFolder = fileById.get(moveTargetId);
       toast.success(
         `Moved ${moveDialog.length} item${moveDialog.length > 1 ? "s" : ""} to ${targetFolder?.fileName ?? "folder"}`,
       );
@@ -631,7 +664,7 @@ export default function FilesPage() {
       const fileId = e.dataTransfer.getData("application/x-onestopg-file");
       if (!fileId) return;
 
-      const file = files.find((f) => f.driveFileId === fileId);
+      const file = fileById.get(fileId);
       if (!file) return;
 
       // Don't drop on itself or its own parent
@@ -659,99 +692,13 @@ export default function FilesPage() {
       }
       setDraggedFile(null);
     },
-    [files, moveFile, refreshFiles],
+    [fileById, moveFile, refreshFiles],
   );
 
   const handleDragEnd = useCallback(() => {
     setDraggedFile(null);
     setDragOverFolder(null);
   }, []);
-
-  // ── Per-item action menu (shared between list & grid) ─────
-  function FileActionMenu({ file }: { file: FileMetadata }) {
-    const isFolder = file.mimeType === "application/vnd.google-apps.folder";
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-            />
-          }
-        >
-          <MoreVertical className="h-4 w-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {!isFolder && (
-            <DropdownMenuItem onClick={() => handleOpenFile(file)}>
-              {canPreviewInline(file.mimeType) ? (
-                <>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Preview
-                </>
-              ) : driveService.isGoogleWorkspaceFile(file.mimeType) ? (
-                <>
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open in Google
-                </>
-              ) : (
-                <>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Open
-                </>
-              )}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onClick={() => {
-              setNewName(file.fileName);
-              setRenameDialog(file);
-            }}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setMoveTargetId(null);
-              setMoveFolderSearch("");
-              setMoveDialog([file]);
-            }}
-          >
-            <FolderInput className="mr-2 h-4 w-4" />
-            Move to…
-          </DropdownMenuItem>
-          {!isFolder && (
-            <>
-              <DropdownMenuItem onClick={() => handleDownload(file)}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setShareEmail("");
-                  setShareDialog(file);
-                }}
-              >
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
-              </DropdownMenuItem>
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => handleTrash(file)}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Trash
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -869,6 +816,7 @@ export default function FilesPage() {
       {accountEmails.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
           <Badge
+            className="cursor-pointer"
             variant={accountFilter === "all" ? "default" : "outline"}
             onClick={() => setAccountFilter("all")}
           >
@@ -877,6 +825,7 @@ export default function FilesPage() {
           {accountEmails.map((email) => (
             <Badge
               key={email}
+              className="cursor-pointer"
               variant={accountFilter === email ? "default" : "outline"}
               onClick={() => setAccountFilter(email)}
             >
@@ -903,7 +852,7 @@ export default function FilesPage() {
 
       {/* Multi-select floating bar */}
       {selectedIds.size > 0 && (
-        <div className="sticky bottom-4 z-50 mx-auto w-fit">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
           <Card className="shadow-lg border-primary/30">
             <CardContent className="py-2 px-4 flex items-center gap-3">
               <span className="text-sm font-medium">
@@ -1052,7 +1001,15 @@ export default function FilesPage() {
                       {formatDate(file.createdAt)}
                     </span>
                     <div onClick={(e) => e.stopPropagation()}>
-                      <FileActionMenu file={file} />
+                      <FileActionMenu
+                        file={file}
+                        onOpen={handleOpenFile}
+                        onRename={onMenuRename}
+                        onMove={onMenuMove}
+                        onDownload={handleDownload}
+                        onShare={onMenuShare}
+                        onTrash={handleTrash}
+                      />
                     </div>
                   </div>
                 );
@@ -1137,7 +1094,15 @@ export default function FilesPage() {
                         className="absolute top-1 right-1"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <FileActionMenu file={file} />
+                        <FileActionMenu
+                          file={file}
+                          onOpen={handleOpenFile}
+                          onRename={onMenuRename}
+                          onMove={onMenuMove}
+                          onDownload={handleDownload}
+                          onShare={onMenuShare}
+                          onTrash={handleTrash}
+                        />
                       </div>
 
                       {file.thumbnailLink &&

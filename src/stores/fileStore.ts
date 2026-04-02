@@ -14,6 +14,7 @@ interface FileState {
   error: string | null;
   lastFetchedAt: number;
   refreshFiles: (accounts: AccountToken[]) => Promise<void>;
+  silentRefresh: (accounts: AccountToken[]) => Promise<void>;
   loadInitial: (accounts: AccountToken[]) => Promise<void>;
   clearFiles: () => void;
 }
@@ -96,6 +97,39 @@ export const useFileStore = create<FileState>((set, get) => ({
 
     inFlightFetch = doFetch();
     await inFlightFetch;
+  },
+
+  /** Background refresh — no isLoading change, no skeleton shown */
+  silentRefresh: async (accounts: AccountToken[]) => {
+    if (accounts.length === 0 || inFlightFetch) return;
+
+    const currentVersion = ++version;
+    try {
+      const allFiles: FileMetadata[] = [];
+      for (const account of accounts) {
+        try {
+          const accountFiles = await drive.syncAllFiles(
+            account.accessToken,
+            account.email,
+          );
+          allFiles.push(...accountFiles);
+          await fileCache.cacheFiles(account.email, accountFiles);
+        } catch {
+          // Silently fall back to cached on error
+          try {
+            const cached = await fileCache.getCachedFiles(account.email);
+            allFiles.push(...cached);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (currentVersion === version) {
+        set({ files: allFiles, lastFetchedAt: Date.now() });
+      }
+    } catch {
+      // Silent failure — don't update error state
+    }
   },
 
   loadInitial: async (accounts: AccountToken[]) => {
