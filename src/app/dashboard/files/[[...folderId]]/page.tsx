@@ -91,6 +91,7 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
 function canPreviewInline(mimeType: string | null): boolean {
   const t = mimeType ?? "";
   if (t.startsWith("image/") || t === "application/pdf") return true;
+  if (t.startsWith("video/") || t.startsWith("audio/")) return true;
   if (driveService.PREVIEWABLE_WORKSPACE_TYPES.has(t)) return true;
   return false;
 }
@@ -1401,6 +1402,38 @@ export default function FilesPage() {
                   className="w-full h-full border-0"
                   title={previewFile.fileName}
                 />
+              )}
+
+            {/* Video preview */}
+            {!previewLoading &&
+              !previewError &&
+              previewBlobUrl &&
+              previewFile?.mimeType?.startsWith("video/") && (
+                <video
+                  src={previewBlobUrl}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[80vh] w-auto h-auto p-4"
+                />
+              )}
+
+            {/* Audio preview */}
+            {!previewLoading &&
+              !previewError &&
+              previewBlobUrl &&
+              previewFile?.mimeType?.startsWith("audio/") && (
+                <div className="flex flex-col items-center gap-6 p-8">
+                  <Music className="h-20 w-20 text-pink-400" />
+                  <p className="text-sm font-medium text-foreground">
+                    {previewFile.fileName}
+                  </p>
+                  <audio
+                    src={previewBlobUrl}
+                    controls
+                    autoPlay
+                    className="w-full max-w-md"
+                  />
+                </div>
               )}
 
             {/* Exported Workspace file (Docs/Slides/Drawings) as PDF */}
