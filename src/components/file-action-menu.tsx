@@ -20,15 +20,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import * as driveService from "@/services/drive";
+import { canPreviewInline } from "@/lib/file-helpers";
 import type { FileMetadata } from "@/types";
-
-function canPreviewInline(mimeType: string | null): boolean {
-  const t = mimeType ?? "";
-  if (t.startsWith("image/") || t === "application/pdf") return true;
-  if (t.startsWith("video/") || t.startsWith("audio/")) return true;
-  if (driveService.PREVIEWABLE_WORKSPACE_TYPES.has(t)) return true;
-  return false;
-}
 
 interface FileActionMenuProps {
   file: FileMetadata;

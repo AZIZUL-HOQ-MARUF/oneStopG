@@ -1,111 +1,30 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo, useEffect, useTransition } from "react";
+import { useState, useCallback, useMemo, useEffect, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import NextImage from "next/image";
 import { useFiles } from "@/hooks/useFiles";
 import { useDrive } from "@/hooks/useDrive";
-import { formatBytes, formatDate } from "@/lib/format";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import {
-  Upload,
-  Search,
-  Trash2,
-  FolderOpen,
-  FolderPlus,
-  FolderInput,
-  File,
-  Image,
-  Video,
-  Music,
-  FileText,
-  Table,
-  Archive,
-  Grid,
-  List,
-  RefreshCw,
-  ChevronRight,
-  ExternalLink,
-  X,
-  Loader2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Link,
-  Mail,
-  Check,
-} from "lucide-react";
-import { FileActionMenu } from "@/components/file-action-menu";
+import { FolderOpen } from "lucide-react";
+import { canPreviewInline, isSpreadsheet } from "@/lib/file-helpers";
+import type { SortField, SortDir } from "@/lib/file-helpers";
 import * as driveService from "@/services/drive";
 import type { FileMetadata } from "@/types";
 
-// ── Helpers ─────────────────────────────────────────────────
-type SortField = "name" | "date" | "size" | "type";
-type SortDir = "asc" | "desc";
-
-function FileIcon({ mimeType }: { mimeType: string | null }) {
-  const t = mimeType ?? "";
-  if (t === "application/vnd.google-apps.folder")
-    return <FolderOpen className="h-5 w-5 text-blue-400" />;
-  if (t.startsWith("image/"))
-    // eslint-disable-next-line jsx-a11y/alt-text -- lucide-react icon, not <img>
-    return <Image className="h-5 w-5 text-green-400" />;
-  if (t.startsWith("video/"))
-    return <Video className="h-5 w-5 text-purple-400" />;
-  if (t.startsWith("audio/"))
-    return <Music className="h-5 w-5 text-pink-400" />;
-  if (t.includes("pdf") || t.includes("document") || t.startsWith("text/"))
-    return <FileText className="h-5 w-5 text-orange-400" />;
-  if (t.includes("spreadsheet") || t.includes("sheet"))
-    return <Table className="h-5 w-5 text-emerald-400" />;
-  if (t.includes("zip") || t.includes("compressed"))
-    return <Archive className="h-5 w-5 text-yellow-400" />;
-  return <File className="h-5 w-5 text-muted-foreground" />;
-}
-
-function canPreviewInline(mimeType: string | null): boolean {
-  const t = mimeType ?? "";
-  if (t.startsWith("image/") || t === "application/pdf") return true;
-  if (t.startsWith("video/") || t.startsWith("audio/")) return true;
-  if (driveService.PREVIEWABLE_WORKSPACE_TYPES.has(t)) return true;
-  return false;
-}
-
-function isSpreadsheet(mimeType: string | null): boolean {
-  return mimeType === "application/vnd.google-apps.spreadsheet";
-}
-
-const SORT_LABELS: Record<SortField, string> = {
-  name: "Name",
-  date: "Date",
-  size: "Size",
-  type: "Type",
-};
+// ── Sub-components ──────────────────────────────────────────
+import { FilesHeader } from "@/components/files/files-header";
+import { AccountFilterTabs } from "@/components/files/account-filter-tabs";
+import { UploadProgressBar } from "@/components/files/upload-progress-bar";
+import { MultiSelectBar } from "@/components/files/multi-select-bar";
+import { FileListView } from "@/components/files/file-list-view";
+import { FileGridView } from "@/components/files/file-grid-view";
+import { RenameDialog } from "@/components/files/rename-dialog";
+import { NewFolderDialog } from "@/components/files/new-folder-dialog";
+import { MoveToFolderDialog } from "@/components/files/move-to-folder-dialog";
+import { ShareDialog } from "@/components/files/share-dialog";
+import { FilePreviewDialog } from "@/components/files/file-preview-dialog";
 
 // ── Main component ──────────────────────────────────────────
 export default function FilesPage() {
@@ -145,7 +64,6 @@ export default function FilesPage() {
   // Upload
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preview
   const [previewFile, setPreviewFile] = useState<FileMetadata | null>(null);
@@ -701,189 +619,55 @@ export default function FilesPage() {
     setDragOverFolder(null);
   }, []);
 
+  // ── Open in Google (for preview dialog) ───────────────────
+  const handleOpenInGoogle = useCallback(
+    async (file: FileMetadata) => {
+      try {
+        const url = await openFile(file);
+        window.open(url, "_blank", "noopener");
+      } catch {
+        toast.error("Failed to open in Google");
+      }
+    },
+    [openFile],
+  );
+
   // ── Render ────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Files</h1>
-          <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1 flex-wrap">
-            {breadcrumbs.map((crumb, i) => (
-              <div key={crumb.id ?? "root"} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
-                <button
-                  onClick={() => navigateToBreadcrumb(i)}
-                  className={`hover:text-foreground transition-colors ${
-                    i === breadcrumbs.length - 1
-                      ? "text-foreground font-medium"
-                      : ""
-                  }`}
-                >
-                  {crumb.name}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+      <FilesHeader
+        breadcrumbs={breadcrumbs}
+        onNavigateBreadcrumb={navigateToBreadcrumb}
+        search={search}
+        onSearchChange={setSearch}
+        sortBy={sortBy}
+        onSortByChange={(v) => setSortBy(v)}
+        sortDir={sortDir}
+        onSortDirToggle={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+        viewMode={viewMode}
+        onViewModeToggle={() => setViewMode((v) => (v === "list" ? "grid" : "list"))}
+        onRefresh={refreshFiles}
+        onNewFolder={() => {
+          setFolderName("");
+          setNewFolderDialog(true);
+        }}
+        onUpload={handleUpload}
+      />
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search files..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 w-64"
-            />
-          </div>
+      <AccountFilterTabs
+        accountEmails={accountEmails}
+        accountFilter={accountFilter}
+        onFilterChange={setAccountFilter}
+      />
 
-          {/* Sort dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="outline" size="sm" />}
-            >
-              <ArrowUpDown className="mr-2 h-4 w-4" />
-              {SORT_LABELS[sortBy]}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup
-                value={sortBy}
-                onValueChange={(v) => setSortBy(v as SortField)}
-              >
-                {(Object.keys(SORT_LABELS) as SortField[]).map((key) => (
-                  <DropdownMenuRadioItem key={key} value={key}>
-                    {SORT_LABELS[key]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <UploadProgressBar uploading={uploading} uploadProgress={uploadProgress} />
 
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-          >
-            {sortDir === "asc" ? (
-              <ArrowUp className="h-4 w-4" />
-            ) : (
-              <ArrowDown className="h-4 w-4" />
-            )}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() =>
-              setViewMode(viewMode === "list" ? "grid" : "list")
-            }
-          >
-            {viewMode === "list" ? (
-              <Grid className="h-4 w-4" />
-            ) : (
-              <List className="h-4 w-4" />
-            )}
-          </Button>
-          <Button variant="outline" size="icon" onClick={refreshFiles}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setFolderName("");
-              setNewFolderDialog(true);
-            }}
-          >
-            <FolderPlus className="mr-2 h-4 w-4" />
-            New Folder
-          </Button>
-          <Button onClick={() => fileInputRef.current?.click()}>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => handleUpload(e.target.files)}
-          />
-        </div>
-      </div>
-
-      {/* Account filter tabs */}
-      {accountEmails.length > 1 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge
-            className="cursor-pointer"
-            variant={accountFilter === "all" ? "default" : "outline"}
-            onClick={() => setAccountFilter("all")}
-          >
-            All Accounts
-          </Badge>
-          {accountEmails.map((email) => (
-            <Badge
-              key={email}
-              className="cursor-pointer"
-              variant={accountFilter === email ? "default" : "outline"}
-              onClick={() => setAccountFilter(email)}
-            >
-              {email}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {/* Upload progress */}
-      {uploading && (
-        <Card>
-          <CardContent className="py-3">
-            <div className="flex items-center gap-3">
-              <Upload className="h-4 w-4 animate-bounce text-primary" />
-              <Progress value={uploadProgress} className="flex-1 h-2" />
-              <span className="text-sm text-muted-foreground">
-                {uploadProgress}%
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Multi-select floating bar */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-          <Card className="shadow-lg border-primary/30">
-            <CardContent className="py-2 px-4 flex items-center gap-3">
-              <span className="text-sm font-medium">
-                {selectedIds.size} selected
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkMove}
-              >
-                <FolderInput className="mr-2 h-4 w-4" />
-                Move to…
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={handleBulkTrash}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Trash
-              </Button>
-              <Button variant="ghost" size="sm" onClick={deselectAll}>
-                <X className="mr-1 h-4 w-4" />
-                Deselect
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <MultiSelectBar
+        count={selectedIds.size}
+        onBulkMove={handleBulkMove}
+        onBulkTrash={handleBulkTrash}
+        onDeselectAll={deselectAll}
+      />
 
       {/* Drop zone + file list */}
       <Card
@@ -905,575 +689,110 @@ export default function FilesPage() {
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
               <FolderOpen className="h-12 w-12 mb-4" />
               <p className="text-lg">
-                {search
-                  ? "No files match your search"
-                  : "This folder is empty"}
+                {search ? "No files match your search" : "This folder is empty"}
               </p>
-              <p className="text-sm mt-1">
-                Drag & drop files here or click Upload
-              </p>
+              <p className="text-sm mt-1">Drag & drop files here or click Upload</p>
             </div>
           ) : viewMode === "list" ? (
-            /* ── List view ──────────────────────────────────── */
-            <div className="divide-y divide-border">
-              {/* Select-all header */}
-              <div className="flex items-center gap-3 px-4 py-2 bg-muted/30">
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={
-                      selectedIds.size === sortedFiles.length &&
-                      sortedFiles.length > 0
-                    }
-                    onCheckedChange={(checked) =>
-                      checked ? selectAll() : deselectAll()
-                    }
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground font-medium">
-                  Name
-                </span>
-                <span className="text-xs text-muted-foreground hidden sm:block ml-auto mr-24">
-                  Size
-                </span>
-                <span className="text-xs text-muted-foreground hidden md:block mr-10">
-                  Created
-                </span>
-              </div>
-              {sortedFiles.map((file) => {
-                const isFolder =
-                  file.mimeType === "application/vnd.google-apps.folder";
-                return (
-                  <div
-                    key={file.driveFileId}
-                    draggable
-                    onDragStart={(e) => handleDragStartInternal(e, file)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={
-                      isFolder
-                        ? (e) =>
-                            handleFolderDragOver(e, file.driveFileId)
-                        : undefined
-                    }
-                    onDragLeave={isFolder ? handleFolderDragLeave : undefined}
-                    onDrop={
-                      isFolder
-                        ? (e) => handleFolderDrop(e, file)
-                        : undefined
-                    }
-                    className={`flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors group cursor-pointer ${
-                      dragOverFolder === file.driveFileId
-                        ? "ring-2 ring-primary ring-inset bg-primary/5"
-                        : ""
-                    } ${
-                      draggedFile?.driveFileId === file.driveFileId
-                        ? "opacity-50"
-                        : ""
-                    } ${
-                      selectedIds.has(file.driveFileId) ? "bg-accent/60" : ""
-                    }`}
-                    onClick={() => handleOpenFile(file)}
-                  >
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSelect(file.driveFileId);
-                      }}
-                    >
-                      <Checkbox
-                        checked={selectedIds.has(file.driveFileId)}
-                        onCheckedChange={() =>
-                          toggleSelect(file.driveFileId)
-                        }
-                      />
-                    </div>
-                    <FileIcon mimeType={file.mimeType} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {file.fileName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {file.accountEmail}
-                      </p>
-                    </div>
-                    <span className="hidden text-xs text-muted-foreground sm:block">
-                      {formatBytes(file.size)}
-                    </span>
-                    <span className="hidden text-xs text-muted-foreground md:block">
-                      {formatDate(file.createdAt)}
-                    </span>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <FileActionMenu
-                        file={file}
-                        onOpen={handleOpenFile}
-                        onRename={onMenuRename}
-                        onMove={onMenuMove}
-                        onDownload={handleDownload}
-                        onShare={onMenuShare}
-                        onTrash={handleTrash}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <FileListView
+              files={sortedFiles}
+              selectedIds={selectedIds}
+              dragOverFolder={dragOverFolder}
+              draggedFile={draggedFile}
+              onToggleSelect={toggleSelect}
+              onSelectAll={selectAll}
+              onDeselectAll={deselectAll}
+              onOpenFile={handleOpenFile}
+              onDragStart={handleDragStartInternal}
+              onDragEnd={handleDragEnd}
+              onFolderDragOver={handleFolderDragOver}
+              onFolderDragLeave={handleFolderDragLeave}
+              onFolderDrop={handleFolderDrop}
+              onRename={onMenuRename}
+              onMove={onMenuMove}
+              onDownload={handleDownload}
+              onShare={onMenuShare}
+              onTrash={handleTrash}
+            />
           ) : (
-            /* ── Grid view ─────────────────────────────────── */
-            <div>
-              {/* Select-all bar */}
-              <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/30">
-                <Checkbox
-                  checked={
-                    selectedIds.size === sortedFiles.length &&
-                    sortedFiles.length > 0
-                  }
-                  onCheckedChange={(checked) =>
-                    checked ? selectAll() : deselectAll()
-                  }
-                />
-                <span className="text-xs text-muted-foreground font-medium">
-                  Select all
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {sortedFiles.map((file) => {
-                  const isFolder =
-                    file.mimeType === "application/vnd.google-apps.folder";
-                  return (
-                    <div
-                      key={file.driveFileId}
-                      draggable
-                      onDragStart={(e) => handleDragStartInternal(e, file)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={
-                        isFolder
-                          ? (e) =>
-                              handleFolderDragOver(e, file.driveFileId)
-                          : undefined
-                      }
-                      onDragLeave={
-                        isFolder ? handleFolderDragLeave : undefined
-                      }
-                      onDrop={
-                        isFolder
-                          ? (e) => handleFolderDrop(e, file)
-                          : undefined
-                      }
-                      className={`group relative flex flex-col items-center rounded-lg border border-border p-4 hover:bg-accent transition-colors cursor-pointer ${
-                        dragOverFolder === file.driveFileId
-                          ? "ring-2 ring-primary bg-primary/5"
-                          : ""
-                      } ${
-                        draggedFile?.driveFileId === file.driveFileId
-                          ? "opacity-50"
-                          : ""
-                      } ${
-                        selectedIds.has(file.driveFileId) ? "bg-accent/60 border-primary/40" : ""
-                      }`}
-                      onClick={() => handleOpenFile(file)}
-                    >
-                      {/* Checkbox top-left */}
-                      <div
-                        className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity data-checked:opacity-100"
-                        data-checked={
-                          selectedIds.has(file.driveFileId) || undefined
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSelect(file.driveFileId);
-                        }}
-                      >
-                        <Checkbox
-                          checked={selectedIds.has(file.driveFileId)}
-                          onCheckedChange={() =>
-                            toggleSelect(file.driveFileId)
-                          }
-                        />
-                      </div>
-
-                      {/* Action menu top-right */}
-                      <div
-                        className="absolute top-1 right-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <FileActionMenu
-                          file={file}
-                          onOpen={handleOpenFile}
-                          onRename={onMenuRename}
-                          onMove={onMenuMove}
-                          onDownload={handleDownload}
-                          onShare={onMenuShare}
-                          onTrash={handleTrash}
-                        />
-                      </div>
-
-                      {file.thumbnailLink &&
-                      file.mimeType?.startsWith("image/") ? (
-                        <NextImage
-                          src={file.thumbnailLink}
-                          alt={file.fileName}
-                          width={48}
-                          height={48}
-                          className="h-12 w-12 rounded object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <FileIcon mimeType={file.mimeType} />
-                      )}
-                      <p className="mt-2 text-xs font-medium text-center truncate w-full">
-                        {file.fileName}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {formatBytes(file.size)}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <FileGridView
+              files={sortedFiles}
+              selectedIds={selectedIds}
+              dragOverFolder={dragOverFolder}
+              draggedFile={draggedFile}
+              onToggleSelect={toggleSelect}
+              onSelectAll={selectAll}
+              onDeselectAll={deselectAll}
+              onOpenFile={handleOpenFile}
+              onDragStart={handleDragStartInternal}
+              onDragEnd={handleDragEnd}
+              onFolderDragOver={handleFolderDragOver}
+              onFolderDragLeave={handleFolderDragLeave}
+              onFolderDrop={handleFolderDrop}
+              onRename={onMenuRename}
+              onMove={onMenuMove}
+              onDownload={handleDownload}
+              onShare={onMenuShare}
+              onTrash={handleTrash}
+            />
           )}
         </CardContent>
       </Card>
 
-      {/* ── Rename Dialog ──────────────────────────────────── */}
-      <Dialog
-        open={!!renameDialog}
-        onOpenChange={(open) => !open && setRenameDialog(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename File</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleRename()}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameDialog(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleRename}>Rename</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ── Dialogs ──────────────────────────────────────── */}
+      <RenameDialog
+        file={renameDialog}
+        name={newName}
+        onNameChange={setNewName}
+        onRename={handleRename}
+        onClose={() => setRenameDialog(null)}
+      />
 
-      {/* ── New Folder Dialog ──────────────────────────────── */}
-      <Dialog
+      <NewFolderDialog
         open={newFolderDialog}
-        onOpenChange={(open) => !open && setNewFolderDialog(false)}
-      >
-        <DialogContent>
-          <DialogHeader className="pb-2">
-            <DialogTitle>Create New Folder</DialogTitle>
-          </DialogHeader>
-          <Input
-            placeholder="Folder name"
-            value={folderName}
-            onChange={(e) => setFolderName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
-            autoFocus
-          />
-          <DialogFooter className="mt-2">
-            <Button
-              variant="outline"
-              onClick={() => setNewFolderDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCreateFolder}>Create</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        folderName={folderName}
+        onFolderNameChange={setFolderName}
+        onCreate={handleCreateFolder}
+        onClose={() => setNewFolderDialog(false)}
+      />
 
-      {/* ── Move to Folder Dialog ──────────────────────────── */}
-      <Dialog
-        open={!!moveDialog}
-        onOpenChange={(open) => {
-          if (!open) {
-            setMoveDialog(null);
-            setMoveTargetId(null);
-            setMoveFolderSearch("");
-          }
+      <MoveToFolderDialog
+        files={moveDialog}
+        targetId={moveTargetId}
+        onTargetChange={setMoveTargetId}
+        folderSearch={moveFolderSearch}
+        onFolderSearchChange={setMoveFolderSearch}
+        filteredFolders={filteredMoveFolders}
+        onMove={handleMove}
+        onClose={() => {
+          setMoveDialog(null);
+          setMoveTargetId(null);
+          setMoveFolderSearch("");
         }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Move {moveDialog?.length === 1 ? `"${moveDialog[0].fileName}"` : `${moveDialog?.length} items`}
-            </DialogTitle>
-            <DialogDescription>
-              Select a destination folder
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              placeholder="Search folders…"
-              value={moveFolderSearch}
-              onChange={(e) => setMoveFolderSearch(e.target.value)}
-              autoFocus
-            />
-            <div className="max-h-60 overflow-y-auto rounded-md border border-border divide-y divide-border">
-              {filteredMoveFolders.length === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No folders found
-                </div>
-              ) : (
-                filteredMoveFolders.map((folder) => (
-                  <button
-                    key={folder.driveFileId}
-                    onClick={() => setMoveTargetId(folder.driveFileId)}
-                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent transition-colors ${
-                      moveTargetId === folder.driveFileId
-                        ? "bg-primary/10 text-primary"
-                        : ""
-                    }`}
-                  >
-                    <FolderOpen className="h-4 w-4 shrink-0 text-blue-400" />
-                    <span className="text-sm truncate flex-1">
-                      {folder.fileName}
-                    </span>
-                    {moveTargetId === folder.driveFileId && (
-                      <Check className="h-4 w-4 shrink-0 text-primary" />
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMoveDialog(null);
-                setMoveTargetId(null);
-                setMoveFolderSearch("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleMove} disabled={!moveTargetId}>
-              Move
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
 
-      {/* ── Share Dialog ───────────────────────────────────── */}
-      <Dialog
-        open={!!shareDialog}
-        onOpenChange={(open) => {
-          if (!open) {
-            setShareDialog(null);
-            setShareEmail("");
-          }
+      <ShareDialog
+        file={shareDialog}
+        email={shareEmail}
+        onEmailChange={setShareEmail}
+        loading={shareLoading}
+        onShareLink={handleShareLink}
+        onShareEmail={handleShareEmail}
+        onClose={() => {
+          setShareDialog(null);
+          setShareEmail("");
         }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Share &ldquo;{shareDialog?.fileName}&rdquo;</DialogTitle>
-            <DialogDescription>
-              Share with a specific person or get a public link
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Email sharing */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Share with email</label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="person@gmail.com"
-                  type="email"
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleShareEmail()}
-                />
-                <Button
-                  onClick={handleShareEmail}
-                  disabled={!shareEmail.trim() || shareLoading}
-                  size="sm"
-                  className="shrink-0"
-                >
-                  {shareLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Mail className="mr-1 h-4 w-4" />
-                      Share
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+      />
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  or
-                </span>
-              </div>
-            </div>
-
-            {/* Link sharing */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleShareLink}
-              disabled={shareLoading}
-            >
-              {shareLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Link className="mr-2 h-4 w-4" />
-              )}
-              Copy share link
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── File Preview Dialog ────────────────────────────── */}
-      <Dialog
-        open={!!previewFile}
-        onOpenChange={(open) => {
-          if (!open) closePreview();
-        }}
-      >
-        <DialogContent className="max-w-[90vw]! w-full max-h-[92vh] h-[92vh] flex flex-col p-0">
-          <DialogHeader className="px-6 py-2 border-b">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="truncate pr-8 text-lg">
-                {previewFile?.fileName}
-              </DialogTitle>
-            </div>
-          </DialogHeader>
-
-          <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center bg-muted/30 relative">
-            {previewLoading && (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm font-medium">Loading preview…</p>
-              </div>
-            )}
-
-            {previewError && !previewLoading && (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground px-6 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
-                  <X className="h-7 w-7 text-destructive" />
-                </div>
-                <p className="text-sm font-medium">Could not load preview</p>
-                <p className="text-xs max-w-md">{previewError}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    if (previewFile) handleOpenFile(previewFile);
-                  }}
-                >
-                  Retry
-                </Button>
-              </div>
-            )}
-
-            {!previewLoading &&
-              !previewError &&
-              previewBlobUrl &&
-              previewFile?.mimeType?.startsWith("image/") && (
-                <NextImage
-                  src={previewBlobUrl}
-                  alt={previewFile.fileName}
-                  width={1200}
-                  height={800}
-                  className="max-w-full max-h-[80vh] w-auto h-auto object-contain p-4"
-                  unoptimized
-                />
-              )}
-
-            {!previewLoading &&
-              !previewError &&
-              previewBlobUrl &&
-              previewFile?.mimeType === "application/pdf" && (
-                <iframe
-                  src={previewBlobUrl}
-                  className="w-full h-full border-0"
-                  title={previewFile.fileName}
-                />
-              )}
-
-            {/* Video preview */}
-            {!previewLoading &&
-              !previewError &&
-              previewBlobUrl &&
-              previewFile?.mimeType?.startsWith("video/") && (
-                <video
-                  src={previewBlobUrl}
-                  controls
-                  autoPlay
-                  className="max-w-full max-h-[80vh] w-auto h-auto p-4"
-                />
-              )}
-
-            {/* Audio preview */}
-            {!previewLoading &&
-              !previewError &&
-              previewBlobUrl &&
-              previewFile?.mimeType?.startsWith("audio/") && (
-                <div className="flex flex-col items-center gap-6 p-8">
-                  <Music className="h-20 w-20 text-pink-400" />
-                  <p className="text-sm font-medium text-foreground">
-                    {previewFile.fileName}
-                  </p>
-                  <audio
-                    src={previewBlobUrl}
-                    controls
-                    autoPlay
-                    className="w-full max-w-md"
-                  />
-                </div>
-              )}
-
-            {/* Exported Workspace file (Docs/Slides/Drawings) as PDF */}
-            {!previewLoading &&
-              !previewError &&
-              previewBlobUrl &&
-              previewFile?.mimeType &&
-              driveService.PREVIEWABLE_WORKSPACE_TYPES.has(previewFile.mimeType) && (
-                <iframe
-                  src={previewBlobUrl}
-                  className="w-full h-full border-0"
-                  title={previewFile.fileName}
-                />
-              )}
-
-            {/* Floating "Open in Google" button for workspace files */}
-            {!previewLoading &&
-              !previewError &&
-              previewFile?.mimeType &&
-              driveService.PREVIEWABLE_WORKSPACE_TYPES.has(previewFile.mimeType) && (
-                <Button
-                  className="absolute bottom-6 right-6 shadow-lg gap-2"
-                  onClick={async () => {
-                    try {
-                      const url = await openFile(previewFile);
-                      window.open(url, "_blank", "noopener");
-                    } catch {
-                      toast.error("Failed to open in Google");
-                    }
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open in Google
-                </Button>
-              )}
-          </div>
-
-          <DialogFooter className="px-6 py-2 border-t gap-2" />
-        </DialogContent>
-      </Dialog>
+      <FilePreviewDialog
+        file={previewFile}
+        blobUrl={previewBlobUrl}
+        loading={previewLoading}
+        error={previewError}
+        onClose={closePreview}
+        onRetry={handleOpenFile}
+        onOpenInGoogle={handleOpenInGoogle}
+      />
     </div>
   );
 }
